@@ -81,7 +81,7 @@
             <td>${data.views || '-'}</td>
             <td>${data.channel_name || '-'}</td>
             <td>${data.subscriber_count || '-'}</td>
-            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">🔗</a>` : 'N/A'}</td>
+            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
           `;
         } catch (err) {
           row.innerHTML = `
