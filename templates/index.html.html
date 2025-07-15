@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OK.ru Bulk Video Scraper</title>
+    <style>
+        textarea { width: 400px; height: 160px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #aaa; padding: 5px; font-size: 14px; }
+        th { background: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h2>OK.ru Bulk Video Scraper</h2>
+    <form method="post">
+        <label>Enter one or more OK.ru video URLs (one per line):</label><br>
+        <textarea name="urls" placeholder="Paste URLs here" required>{{ urls }}</textarea><br>
+        <button type="submit">Scrape</button>
+    </form>
+    <hr>
+    {% if results %}
+        <table>
+            <tr>
+                <th>#</th>
+                <th>URL</th>
+                <th>Title</th>
+                <th>Duration (sec)</th>
+                <th>Views</th>
+                <th>Upload Date</th>
+                <th>Channel URL</th>
+                <th>Channel Name</th>
+                <th>Subscribers</th>
+                <th>Status</th>
+            </tr>
+            {% for r in results %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><a href="{{ r.url }}" target="_blank">{{ r.url }}</a></td>
+                    <td>{{ r.title }}</td>
+                    <td>{{ r.duration_seconds }}</td>
+                    <td>{{ r.views }}</td>
+                    <td>{{ r.upload_date }}</td>
+                    <td><a href="{{ r.channel_url }}" target="_blank">{{ r.channel_url }}</a></td>
+                    <td>{{ r.channel_name }}</td>
+                    <td>{{ r.subscribers }}</td>
+                    <td>
+                        {% if r.status == "Success" %}
+                            <span style="color:green;">Success</span>
+                        {% else %}
+                            <span style="color:red;">Error: {{ r.error }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+</body>
+</html>
