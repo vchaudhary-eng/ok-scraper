@@ -22,6 +22,42 @@ class VideoDetails(BaseModel):
     channel_name: Optional[str] = None
     subscriber_count: Optional[str] = None
 
+def convert_to_ddmmyyyy(date_str: str) -> str:
+    month_map = {
+        'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04', 'май': '05', 'мая': '05',
+        'июн': '06', 'июл': '07', 'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+        'january': '01', 'february': '02', 'march': '03', 'april': '04', 'june': '06',
+        'july': '07', 'august': '08', 'september': '09', 'october': '10', 'november': '11', 'december': '12'
+    }
+
+    date_str = date_str.strip().replace('.', '').replace(',', '').lower()
+    parts = date_str.split()
+
+    try:
+        if "вчера" in date_str:
+            return (datetime.now() - timedelta(days=1)).strftime("%d-%m-%Y")
+        elif len(parts) == 3:
+            day = parts[0].zfill(2)
+            month = month_map.get(parts[1][:3], '??')
+            year = parts[2]
+        elif len(parts) == 2:
+            day = parts[0].zfill(2)
+            month = month_map.get(parts[1][:3], '??')
+            year = str(datetime.now().year)
+        elif re.match(r"\d{1,2}-\w{3,}", date_str):  # like 15-jul-2025
+            sub_parts = date_str.split('-')
+            day = sub_parts[0].zfill(2)
+            month = month_map.get(sub_parts[1][:3], '??')
+            year = sub_parts[2] if len(sub_parts) > 2 else str(datetime.now().year)
+        else:
+            return date_str
+
+        return f"{day}-{month}-{year}"
+    except:
+        return date_str
+
 def scrape_okru_video(url: str) -> VideoDetails:
     try:
         headers = {
@@ -35,7 +71,7 @@ def scrape_okru_video(url: str) -> VideoDetails:
         soup = BeautifulSoup(html, 'html.parser')
         video_details = VideoDetails(video_url=url)
 
-        # ✅ Title (og:title)
+        # ✅ Title
         title_meta = soup.find("meta", property="og:title")
         video_details.title = title_meta['content'].strip() if title_meta else "N/A"
 
@@ -56,22 +92,8 @@ def scrape_okru_video(url: str) -> VideoDetails:
         # ✅ Upload date
         upload_date_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)</span>', html, re.IGNORECASE)
         if upload_date_match:
-            date_text = upload_date_match.group(1).strip()
-            if "вчера" in date_text.lower():
-                yesterday = datetime.now() - timedelta(days=1)
-                video_details.upload_date = yesterday.strftime("%d/%m/%Y")
-            else:
-                parts = date_text.split(" ")
-                if len(parts) >= 1:
-                    date_part = parts[0]
-                    date_parts = date_part.split("-")
-                    if len(date_parts) >= 2:
-                        day = date_parts[0].zfill(2)
-                        month = date_parts[1].zfill(2)
-                        year = date_parts[2] if len(date_parts) == 3 else str(datetime.now().year)
-                        video_details.upload_date = f"{day}/{month}/{year}"
-                    else:
-                        video_details.upload_date = date_text
+            raw_date = upload_date_match.group(1).strip()
+            video_details.upload_date = convert_to_ddmmyyyy(raw_date)
         else:
             video_details.upload_date = "N/A"
 
@@ -87,10 +109,10 @@ def scrape_okru_video(url: str) -> VideoDetails:
         subs_match = re.search(r'subscriberscount="(\d+)"', html, re.IGNORECASE)
         video_details.subscriber_count = subs_match.group(1) if subs_match else "N/A"
 
-        # ✅ Profile URL (multiple strategies)
+        # ✅ Profile URL
         profile_url = None
 
-        # 1. From hovercard
+        # Method 1: Hovercard
         hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
         if hovercard:
             rel = hovercard.get("data-entity-hovercard-url", "")
@@ -99,7 +121,7 @@ def scrape_okru_video(url: str) -> VideoDetails:
             else:
                 profile_url = rel
 
-        # 2. og:url fallback
+        # Method 2: og:url fallback
         if not profile_url:
             og_url = soup.find("meta", property="og:url")
             if og_url:
@@ -108,13 +130,13 @@ def scrape_okru_video(url: str) -> VideoDetails:
                 if match:
                     profile_url = match.group(1)
 
-        # 3. Regex match from script/JSON
+        # Method 3: JSON/script
         if not profile_url:
             match = re.search(r'"authorLink":"(\\/profile\\/[^"]+)"', html)
             if match:
                 profile_url = "https://ok.ru" + match.group(1).replace("\\/", "/")
 
-        # 4. Final fallback
+        # Method 4: Final fallback
         if not profile_url:
             match = re.search(r'/(group|profile)/([\w\d]+)', html)
             if match:
