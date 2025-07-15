@@ -15,6 +15,8 @@
     .loading { color: orange; }
     .success { color: green; }
     .error { color: red; }
+    #copyBtn { margin-top: 10px; background-color: #28a745; }
+    #copyBtn:hover { background-color: #218838; }
   </style>
 </head>
 <body>
@@ -24,6 +26,8 @@
     <textarea id="urlInput" placeholder="https://ok.ru/video/123...&#10;https://ok.ru/video/456..."></textarea><br><br>
     <button type="submit">🚀 Start Scraping</button>
   </form>
+
+  <button id="copyBtn" style="display:none;">📋 Copy Table</button>
 
   <table id="resultsTable" style="display:none;">
     <thead>
@@ -46,6 +50,7 @@
     const textarea = document.getElementById('urlInput');
     const table = document.getElementById('resultsTable');
     const tbody = table.querySelector('tbody');
+    const copyBtn = document.getElementById('copyBtn');
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -54,6 +59,7 @@
       if (urls.length === 0) return;
 
       table.style.display = 'table';
+      copyBtn.style.display = 'inline-block';
 
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
@@ -82,6 +88,27 @@
           `;
         }
       }
+    });
+
+    copyBtn.addEventListener('click', function () {
+      let text = '';
+      const headers = [...table.querySelectorAll('thead th')].map(th => th.innerText.trim()).join('\t');
+      text += headers + '\n';
+
+      const rows = [...tbody.querySelectorAll('tr')];
+      for (const row of rows) {
+        const cols = [...row.querySelectorAll('td')].map(td => td.innerText.trim()).join('\t');
+        text += cols + '\n';
+      }
+
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.innerText = '✅ Copied!';
+        setTimeout(() => {
+          copyBtn.innerText = '📋 Copy Table';
+        }, 1500);
+      }).catch(() => {
+        alert('Clipboard copy failed. Try again.');
+      });
     });
   </script>
 </body>
