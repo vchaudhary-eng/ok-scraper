@@ -21,9 +21,10 @@
 </head>
 <body>
   <h2>🎬 OK.ru Bulk Video Scraper</h2>
+
   <form id="scrapeForm">
     <label>📥 Paste multiple OK.ru URLs (one per line):</label><br>
-    <textarea id="urlInput" placeholder="https://ok.ru/video/123...&#10;https://ok.ru/video/456..."></textarea><br><br>
+    <textarea id="urlInput" placeholder="https://ok.ru/video/123...\nhttps://ok.ru/video/456..."></textarea><br><br>
     <button type="submit">🚀 Start Scraping</button>
   </form>
 
@@ -72,7 +73,7 @@
 
           row.innerHTML = `
             <td>${i + 1}</td>
-            <td><a href="${url}" target="_blank">🔗 Link</a></td>
+            <td><a href="${url}" target="_blank">${url}</a></td>
             <td>${data.title || '-'}</td>
             <td>${data.duration || '-'}</td>
             <td>${data.upload_date || '-'}</td>
