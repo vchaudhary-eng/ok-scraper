@@ -1,15 +1,15 @@
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import requests
 from bs4 import BeautifulSoup
+import re
 from urllib.parse import urlparse
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
-import re
 
-app = FastAPI()
+app = FastAPI(title="okru-scraper")
 templates = Jinja2Templates(directory="templates")
 
 class VideoDetails(BaseModel):
@@ -23,69 +23,91 @@ class VideoDetails(BaseModel):
     subscriber_count: Optional[str] = None
 
 def scrape_okru_video(url: str) -> VideoDetails:
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
     try:
-        res = requests.get(url, headers=headers, timeout=10)
-        res.raise_for_status()
-        html = res.text
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        html = response.text
         soup = BeautifulSoup(html, 'html.parser')
+        video_details = VideoDetails(video_url=url)
 
-        details = VideoDetails(video_url=url)
+        # ✅ Title fix (uses og:title from meta tag)
+        title_meta = soup.find("meta", property="og:title")
+        video_details.title = title_meta['content'].strip() if title_meta else "N/A"
 
-        # ✅ Title (meta og:title)
-        title_tag = soup.find("meta", property="og:title")
-        details.title = title_tag["content"].strip() if title_tag and title_tag.get("content") else "N/A"
-
-        # ✅ Duration
-        dur_match = re.search(r'class="vid-card_duration">([\d:]+)<', html)
-        details.duration = dur_match.group(1) if dur_match else "N/A"
-
-        # ✅ Upload Date
-        date_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)<', html)
-        if date_match:
-            date_text = date_match.group(1).strip().lower()
-            if "вчера" in date_text:
-                yesterday = datetime.now() - timedelta(days=1)
-                time_part = date_text.split(" ")[-1] if " " in date_text else "00:00"
-                details.upload_date = f"{yesterday.strftime('%d/%m/%Y')} {time_part}"
+        # Duration
+        duration_match = re.search(r'class="vid-card_duration">([\d:]+)</div>', html, re.IGNORECASE)
+        if duration_match:
+            duration_str = duration_match.group(1)
+            time_parts = duration_str.split(":")
+            if len(time_parts) == 3:
+                video_details.duration = duration_str
+            elif len(time_parts) == 2:
+                video_details.duration = f"00:{duration_str}"
             else:
-                parts = date_text.split()
-                date_part = parts[0]
-                time_part = parts[1] if len(parts) > 1 else ""
-                date_parts = date_part.split("-")
-                if len(date_parts) >= 2:
-                    day = date_parts[0]
-                    month = date_parts[1]
-                    year = str(datetime.now().year)
-                    details.upload_date = f"{day}/{month}/{year} {time_part}".strip()
-                else:
-                    details.upload_date = date_text
+                video_details.duration = f"00:00:{duration_str.zfill(2)}"
         else:
-            details.upload_date = "N/A"
+            video_details.duration = "N/A"
 
-        # ✅ Views
-        views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html)
-        details.views = views_match.group(1).strip() if views_match else "N/A"
+        # Upload date
+        upload_date_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)</span>', html, re.IGNORECASE)
+        if upload_date_match:
+            date_text = upload_date_match.group(1).strip()
+            if "вчера" in date_text.lower():
+                yesterday = datetime.now() - timedelta(days=1)
+                video_details.upload_date = yesterday.strftime(f"%d/%m/%Y")
+            else:
+                parts = date_text.split(" ")
+                if len(parts) >= 1:
+                    date_part = parts[0]
+                    date_parts = date_part.split("-")
+                    if len(date_parts) >= 2:
+                        day = date_parts[0].zfill(2)
+                        month = date_parts[1].zfill(2)
+                        year = date_parts[2] if len(date_parts) == 3 else str(datetime.now().year)
+                        video_details.upload_date = f"{day}/{month}/{year}"
+                    else:
+                        video_details.upload_date = date_text
+        else:
+            video_details.upload_date = "N/A"
 
-        # ✅ Channel URL
-        profile_match = re.search(r'/(group|profile)/([\w\d]+)', html)
-        details.profile_url = f"https://ok.ru/{profile_match.group(1)}/{profile_match.group(2)}" if profile_match else "N/A"
+        # Views
+        views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html, re.IGNORECASE)
+        video_details.views = views_match.group(1).strip() if views_match else "N/A"
 
-        # ✅ Channel Name
-        name_match = re.search(r'name="([^"]+)" id="[\d]+"', html)
-        details.channel_name = name_match.group(1) if name_match else "N/A"
+        # Channel URL
+        channel_url_match = re.search(r'/(group|profile)/([\w\d]+)', html, re.IGNORECASE)
+        if channel_url_match:
+            video_details.profile_url = f"https://ok.ru/{channel_url_match.group(1)}/{channel_url_match.group(2)}"
+        else:
+            video_details.profile_url = "N/A"
 
-        # ✅ Subscribers
-        sub_match = re.search(r'subscriberscount="(\d+)"', html)
-        details.subscriber_count = sub_match.group(1) if sub_match else "N/A"
+        # Channel name
+        channel_name_match = re.search(r'name="([^"]+)" id="[\d]+"', html, re.IGNORECASE)
+        video_details.channel_name = channel_name_match.group(1) if channel_name_match else "N/A"
 
-        return details
+        # Subscribers
+        subs_match = re.search(r'subscriberscount="(\d+)"', html, re.IGNORECASE)
+        video_details.subscriber_count = subs_match.group(1) if subs_match else "N/A"
+
+        return video_details
+
     except Exception as e:
-        print(f"Scraping error for {url}: {e}")
-        return VideoDetails(video_url=url, title="N/A", duration="N/A", upload_date="N/A",
-                            profile_url="N/A", views="N/A", channel_name="N/A", subscriber_count="N/A")
+        print(f"[ERROR] {url}: {e}")
+        return VideoDetails(
+            video_url=url,
+            title="N/A",
+            duration="N/A",
+            upload_date="N/A",
+            profile_url="N/A",
+            views="N/A",
+            channel_name="N/A",
+            subscriber_count="N/A"
+        )
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -93,9 +115,16 @@ async def home(request: Request):
 
 @app.get("/api/scrape")
 async def api_scrape_video(url: str):
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    parsed = urlparse(url)
-    if "ok.ru" not in parsed.netloc:
-        raise HTTPException(status_code=400, detail="Invalid OK.ru URL")
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+
+    parsed_url = urlparse(url)
+    if 'ok.ru' not in parsed_url.netloc:
+        raise HTTPException(status_code=400, detail="Please provide a valid ok.ru video URL")
+
     return scrape_okru_video(url)
+
+# ✅ PORT FIX for Render
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=10000)
