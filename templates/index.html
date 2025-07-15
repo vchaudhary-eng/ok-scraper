@@ -1,45 +1,16 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html>
 <head>
-    <title>OK.ru Bulk Video Scraper</title>
+    <title>OK.ru Scraper</title>
 </head>
 <body>
-    <h2>Paste OK.ru Video URLs (one per line):</h2>
-    <form method="post">
-        <textarea name="urls" rows="10" cols="60" required>{{ urls }}</textarea><br><br>
+    <h2>Paste OK.ru URLs (one per line)</h2>
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+    <form action="/scrape" method="post">
+        <textarea name="video_urls" rows="10" cols="80" placeholder="https://ok.ru/video/xyz123..."></textarea><br>
         <button type="submit">Scrape</button>
     </form>
-    <hr>
-    {% if results %}
-    <table border="1" cellpadding="5">
-        <tr>
-            <th>#</th>
-            <th>URL</th>
-            <th>Title</th>
-            <th>Duration (s)</th>
-            <th>Views</th>
-            <th>Upload Date</th>
-            <th>Channel URL</th>
-            <th>Channel Name</th>
-            <th>Subscribers</th>
-            <th>Status</th>
-        </tr>
-        {% for r in results %}
-        <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ r.url }}</td>
-            <td>{{ r.title }}</td>
-            <td>{{ r.duration_seconds }}</td>
-            <td>{{ r.views }}</td>
-            <td>{{ r.upload_date }}</td>
-            <td>{{ r.channel_url }}</td>
-            <td>{{ r.channel_name }}</td>
-            <td>{{ r.subscribers }}</td>
-            <td>{{ r.status }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% endif %}
 </body>
 </html>
