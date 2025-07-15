@@ -79,29 +79,48 @@ def scrape_okru_video(url: str) -> VideoDetails:
         views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html, re.IGNORECASE)
         video_details.views = views_match.group(1).strip() if views_match else "N/A"
 
-        # ✅ Profile URL using hovercard (more reliable)
-        hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
-        if hovercard:
-            relative = hovercard.get("data-entity-hovercard-url", "")
-            if relative.startswith("/"):
-                video_details.profile_url = "https://ok.ru" + relative
-            else:
-                video_details.profile_url = relative
-        else:
-            # Fallback: regex match for /group/ or /profile/
-            channel_url_match = re.search(r'/(group|profile)/([\w\d]+)', html, re.IGNORECASE)
-            if channel_url_match:
-                video_details.profile_url = f"https://ok.ru/{channel_url_match.group(1)}/{channel_url_match.group(2)}"
-            else:
-                video_details.profile_url = "N/A"
-
-        # ✅ Channel name
+        # ✅ Channel Name
         channel_name_match = re.search(r'name="([^"]+)" id="[\d]+"', html, re.IGNORECASE)
         video_details.channel_name = channel_name_match.group(1) if channel_name_match else "N/A"
 
         # ✅ Subscribers
         subs_match = re.search(r'subscriberscount="(\d+)"', html, re.IGNORECASE)
         video_details.subscriber_count = subs_match.group(1) if subs_match else "N/A"
+
+        # ✅ Profile URL (multiple strategies)
+        profile_url = None
+
+        # 1. From hovercard
+        hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
+        if hovercard:
+            rel = hovercard.get("data-entity-hovercard-url", "")
+            if rel.startswith("/"):
+                profile_url = "https://ok.ru" + rel
+            else:
+                profile_url = rel
+
+        # 2. og:url fallback
+        if not profile_url:
+            og_url = soup.find("meta", property="og:url")
+            if og_url:
+                og_content = og_url.get("content", "")
+                match = re.search(r'(https://ok\.ru/(profile|group)/[\w\d]+)', og_content)
+                if match:
+                    profile_url = match.group(1)
+
+        # 3. Regex match from script/JSON
+        if not profile_url:
+            match = re.search(r'"authorLink":"(\\/profile\\/[^"]+)"', html)
+            if match:
+                profile_url = "https://ok.ru" + match.group(1).replace("\\/", "/")
+
+        # 4. Final fallback
+        if not profile_url:
+            match = re.search(r'/(group|profile)/([\w\d]+)', html)
+            if match:
+                profile_url = f"https://ok.ru/{match.group(1)}/{match.group(2)}"
+
+        video_details.profile_url = profile_url or "N/A"
 
         return video_details
 
