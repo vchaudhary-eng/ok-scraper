@@ -41,6 +41,7 @@
         <th>Views</th>
         <th>Channel Name</th>
         <th>Subscribers</th>
+        <th>Profile URL</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -65,7 +66,7 @@
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         const row = tbody.insertRow();
-        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="6" class="loading">⏳ Scraping...</td>`;
+        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="7" class="loading">⏳ Scraping...</td>`;
 
         try {
           const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
@@ -80,12 +81,13 @@
             <td>${data.views || '-'}</td>
             <td>${data.channel_name || '-'}</td>
             <td>${data.subscriber_count || '-'}</td>
+            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">🔗</a>` : 'N/A'}</td>
           `;
         } catch (err) {
           row.innerHTML = `
             <td>${i + 1}</td>
             <td>${url}</td>
-            <td colspan="6" class="error">❌ Error scraping</td>
+            <td colspan="7" class="error">❌ Error scraping</td>
           `;
         }
       }
