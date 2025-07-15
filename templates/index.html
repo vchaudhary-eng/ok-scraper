@@ -1,16 +1,88 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>OK.ru Scraper</title>
+  <meta charset="UTF-8">
+  <title>🎥 OK.ru Video Scraper</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f8f8f8; }
+    h2 { color: #333; }
+    textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; }
+    button { padding: 10px 20px; font-size: 16px; background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 8px; border: 1px solid #ccc; font-size: 14px; }
+    th { background: #eee; }
+    .loading { color: orange; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
 </head>
 <body>
-    <h2>Paste OK.ru URLs (one per line)</h2>
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
-    <form action="/scrape" method="post">
-        <textarea name="video_urls" rows="10" cols="80" placeholder="https://ok.ru/video/xyz123..."></textarea><br>
-        <button type="submit">Scrape</button>
-    </form>
+  <h2>🎬 OK.ru Bulk Video Scraper</h2>
+  <form id="scrapeForm">
+    <label>📥 Paste multiple OK.ru URLs (one per line):</label><br>
+    <textarea id="urlInput" placeholder="https://ok.ru/video/123...&#10;https://ok.ru/video/456..."></textarea><br><br>
+    <button type="submit">🚀 Start Scraping</button>
+  </form>
+
+  <table id="resultsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>URL</th>
+        <th>Title</th>
+        <th>Duration</th>
+        <th>Upload Date</th>
+        <th>Views</th>
+        <th>Channel Name</th>
+        <th>Subscribers</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const form = document.getElementById('scrapeForm');
+    const textarea = document.getElementById('urlInput');
+    const table = document.getElementById('resultsTable');
+    const tbody = table.querySelector('tbody');
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const urls = textarea.value.trim().split('\n').filter(Boolean);
+      tbody.innerHTML = '';
+      if (urls.length === 0) return;
+
+      table.style.display = 'table';
+
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        const row = tbody.insertRow();
+        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="6" class="loading">⏳ Scraping...</td>`;
+
+        try {
+          const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
+          const data = await res.json();
+
+          row.innerHTML = `
+            <td>${i + 1}</td>
+            <td><a href="${url}" target="_blank">🔗 Link</a></td>
+            <td>${data.title || '-'}</td>
+            <td>${data.duration || '-'}</td>
+            <td>${data.upload_date || '-'}</td>
+            <td>${data.views || '-'}</td>
+            <td>${data.channel_name || '-'}</td>
+            <td>${data.subscriber_count || '-'}</td>
+          `;
+        } catch (err) {
+          row.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${url}</td>
+            <td colspan="6" class="error">❌ Error scraping</td>
+          `;
+        }
+      }
+    });
+  </script>
 </body>
 </html>
