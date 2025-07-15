@@ -35,11 +35,11 @@ def scrape_okru_video(url: str) -> VideoDetails:
         soup = BeautifulSoup(html, 'html.parser')
         video_details = VideoDetails(video_url=url)
 
-        # ✅ Title fix (uses og:title from meta tag)
+        # ✅ Title (og:title)
         title_meta = soup.find("meta", property="og:title")
         video_details.title = title_meta['content'].strip() if title_meta else "N/A"
 
-        # Duration
+        # ✅ Duration
         duration_match = re.search(r'class="vid-card_duration">([\d:]+)</div>', html, re.IGNORECASE)
         if duration_match:
             duration_str = duration_match.group(1)
@@ -53,13 +53,13 @@ def scrape_okru_video(url: str) -> VideoDetails:
         else:
             video_details.duration = "N/A"
 
-        # Upload date
+        # ✅ Upload date
         upload_date_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)</span>', html, re.IGNORECASE)
         if upload_date_match:
             date_text = upload_date_match.group(1).strip()
             if "вчера" in date_text.lower():
                 yesterday = datetime.now() - timedelta(days=1)
-                video_details.upload_date = yesterday.strftime(f"%d/%m/%Y")
+                video_details.upload_date = yesterday.strftime("%d/%m/%Y")
             else:
                 parts = date_text.split(" ")
                 if len(parts) >= 1:
@@ -75,22 +75,31 @@ def scrape_okru_video(url: str) -> VideoDetails:
         else:
             video_details.upload_date = "N/A"
 
-        # Views
+        # ✅ Views
         views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html, re.IGNORECASE)
         video_details.views = views_match.group(1).strip() if views_match else "N/A"
 
-        # Channel URL
-        channel_url_match = re.search(r'/(group|profile)/([\w\d]+)', html, re.IGNORECASE)
-        if channel_url_match:
-            video_details.profile_url = f"https://ok.ru/{channel_url_match.group(1)}/{channel_url_match.group(2)}"
+        # ✅ Profile URL using hovercard (more reliable)
+        hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
+        if hovercard:
+            relative = hovercard.get("data-entity-hovercard-url", "")
+            if relative.startswith("/"):
+                video_details.profile_url = "https://ok.ru" + relative
+            else:
+                video_details.profile_url = relative
         else:
-            video_details.profile_url = "N/A"
+            # Fallback: regex match for /group/ or /profile/
+            channel_url_match = re.search(r'/(group|profile)/([\w\d]+)', html, re.IGNORECASE)
+            if channel_url_match:
+                video_details.profile_url = f"https://ok.ru/{channel_url_match.group(1)}/{channel_url_match.group(2)}"
+            else:
+                video_details.profile_url = "N/A"
 
-        # Channel name
+        # ✅ Channel name
         channel_name_match = re.search(r'name="([^"]+)" id="[\d]+"', html, re.IGNORECASE)
         video_details.channel_name = channel_name_match.group(1) if channel_name_match else "N/A"
 
-        # Subscribers
+        # ✅ Subscribers
         subs_match = re.search(r'subscriberscount="(\d+)"', html, re.IGNORECASE)
         video_details.subscriber_count = subs_match.group(1) if subs_match else "N/A"
 
@@ -124,7 +133,7 @@ async def api_scrape_video(url: str):
 
     return scrape_okru_video(url)
 
-# ✅ PORT FIX for Render
+# ✅ For Render deployment
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=10000)
