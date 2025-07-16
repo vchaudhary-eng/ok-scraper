@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>🎥 OK.ru Video Scraper</title>
+  <title>🎥 Scraper Tool</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f8f8f8; }
     h2 { color: #333; }
-    textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; }
-    button { padding: 10px 20px; font-size: 16px; background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    textarea, select { width: 100%; font-size: 14px; padding: 8px; margin-top: 10px; }
+    textarea { height: 140px; }
+    button { padding: 10px 20px; font-size: 16px; background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
     button:hover { background: #0056b3; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 8px; border: 1px solid #ccc; font-size: 14px; }
@@ -15,17 +16,23 @@
     .loading { color: orange; }
     .success { color: green; }
     .error { color: red; }
-    #copyBtn { margin-top: 10px; background-color: #28a745; }
+    #copyBtn { background-color: #28a745; }
     #copyBtn:hover { background-color: #218838; }
   </style>
 </head>
 <body>
-  <h2>🎬 OK.ru Bulk Video Scraper</h2>
+  <h2>🧰 Scraper Tool by Vansh Chaudhary</h2>
 
   <form id="scrapeForm">
-    <label>📥 Paste multiple OK.ru URLs (one per line):</label><br>
-    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary\nPaste OK.ru URLs here..."></textarea>
-<br><br>
+    <label>🛠️ Select Tool:</label>
+    <select id="toolSelector">
+      <option value="okru">OK.ru Scraper</option>
+      <option value="iframe">Iframe Extractor</option>
+    </select>
+
+    <label>📥 Paste multiple URLs (one per line):</label>
+    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary\nPaste URLs here..."></textarea>
+
     <button type="submit">🚀 Start Scraping</button>
   </form>
 
@@ -33,36 +40,46 @@
 
   <table id="resultsTable" style="display:none;">
     <thead>
-      <tr>
-        <th>#</th>
-        <th>URL</th>
-        <th>Title</th>
-        <th>Duration</th>
-        <th>Upload Date</th>
-        <th>Views</th>
-        <th>Channel Name</th>
-        <th>Subscribers</th>
-        <th>Profile URL</th>
-      </tr>
+      <tr id="tableHeader"></tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script>
     const form = document.getElementById('scrapeForm');
+    const toolSelector = document.getElementById('toolSelector');
     const textarea = document.getElementById('urlInput');
     const table = document.getElementById('resultsTable');
+    const thead = document.getElementById('tableHeader');
     const tbody = table.querySelector('tbody');
     const copyBtn = document.getElementById('copyBtn');
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
+      const tool = toolSelector.value;
       const urls = textarea.value.trim().split('\n').filter(Boolean);
       tbody.innerHTML = '';
+      thead.innerHTML = '';
       if (urls.length === 0) return;
 
       table.style.display = 'table';
       copyBtn.style.display = 'inline-block';
+
+      if (tool === 'iframe') {
+        thead.innerHTML = `<th>#</th><th>URL</th><th>Media URLs</th>`;
+      } else {
+        thead.innerHTML = `
+          <th>#</th>
+          <th>URL</th>
+          <th>Title</th>
+          <th>Duration</th>
+          <th>Upload Date</th>
+          <th>Views</th>
+          <th>Channel Name</th>
+          <th>Subscribers</th>
+          <th>Profile URL</th>
+        `;
+      }
 
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
@@ -70,20 +87,29 @@
         row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="7" class="loading">⏳ Scraping...</td>`;
 
         try {
-          const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
+          const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}&tool=${tool}`);
           const data = await res.json();
 
-          row.innerHTML = `
-            <td>${i + 1}</td>
-            <td><a href="${url}" target="_blank">${url}</a></td>
-            <td>${data.title || '-'}</td>
-            <td>${data.duration || '-'}</td>
-            <td>${data.upload_date || '-'}</td>
-            <td>${data.views || '-'}</td>
-            <td>${data.channel_name || '-'}</td>
-            <td>${data.subscriber_count || '-'}</td>
-            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
-          `;
+          if (tool === 'iframe') {
+            const mediaList = (data.media_sources || []).map(src => `<div><a href="${src}" target="_blank">${src}</a></div>`).join('') || 'N/A';
+            row.innerHTML = `
+              <td>${i + 1}</td>
+              <td><a href="${url}" target="_blank">${url}</a></td>
+              <td>${mediaList}</td>
+            `;
+          } else {
+            row.innerHTML = `
+              <td>${i + 1}</td>
+              <td><a href="${url}" target="_blank">${url}</a></td>
+              <td>${data.title || '-'}</td>
+              <td>${data.duration || '-'}</td>
+              <td>${data.upload_date || '-'}</td>
+              <td>${data.views || '-'}</td>
+              <td>${data.channel_name || '-'}</td>
+              <td>${data.subscriber_count || '-'}</td>
+              <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
+            `;
+          }
         } catch (err) {
           row.innerHTML = `
             <td>${i + 1}</td>
