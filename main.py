@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import requests
@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import re
 from urllib.parse import urlparse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timedelta
 
 app = FastAPI(title="okru-scraper")
@@ -21,6 +21,7 @@ class VideoDetails(BaseModel):
     views: Optional[str] = None
     channel_name: Optional[str] = None
     subscriber_count: Optional[str] = None
+    media_sources: Optional[List[str]] = None
 
 def convert_to_ddmmyyyy(date_str: str) -> str:
     month_map = {
@@ -46,7 +47,7 @@ def convert_to_ddmmyyyy(date_str: str) -> str:
             day = parts[0].zfill(2)
             month = month_map.get(parts[1][:3], '??')
             year = str(datetime.now().year)
-        elif re.match(r"\d{1,2}-\w{3,}", date_str):  # like 15-jul-2025
+        elif re.match(r"\d{1,2}-\w{3,}", date_str):
             sub_parts = date_str.split('-')
             day = sub_parts[0].zfill(2)
             month = month_map.get(sub_parts[1][:3], '??')
@@ -71,11 +72,9 @@ def scrape_okru_video(url: str) -> VideoDetails:
         soup = BeautifulSoup(html, 'html.parser')
         video_details = VideoDetails(video_url=url)
 
-        # ✅ Title
         title_meta = soup.find("meta", property="og:title")
         video_details.title = title_meta['content'].strip() if title_meta else "N/A"
 
-        # ✅ Duration
         duration_match = re.search(r'class="vid-card_duration">([\d:]+)</div>', html, re.IGNORECASE)
         if duration_match:
             duration_str = duration_match.group(1)
@@ -89,7 +88,6 @@ def scrape_okru_video(url: str) -> VideoDetails:
         else:
             video_details.duration = "N/A"
 
-        # ✅ Upload date
         upload_date_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)</span>', html, re.IGNORECASE)
         if upload_date_match:
             raw_date = upload_date_match.group(1).strip()
@@ -97,22 +95,16 @@ def scrape_okru_video(url: str) -> VideoDetails:
         else:
             video_details.upload_date = "N/A"
 
-        # ✅ Views
         views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html, re.IGNORECASE)
         video_details.views = views_match.group(1).strip() if views_match else "N/A"
 
-        # ✅ Channel Name
         channel_name_match = re.search(r'name="([^"]+)" id="[\d]+"', html, re.IGNORECASE)
         video_details.channel_name = channel_name_match.group(1) if channel_name_match else "N/A"
 
-        # ✅ Subscribers
         subs_match = re.search(r'subscriberscount="(\d+)"', html, re.IGNORECASE)
         video_details.subscriber_count = subs_match.group(1) if subs_match else "N/A"
 
-        # ✅ Profile URL
         profile_url = None
-
-        # Method 1: Hovercard
         hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
         if hovercard:
             rel = hovercard.get("data-entity-hovercard-url", "")
@@ -121,22 +113,19 @@ def scrape_okru_video(url: str) -> VideoDetails:
             else:
                 profile_url = rel
 
-        # Method 2: og:url fallback
         if not profile_url:
             og_url = soup.find("meta", property="og:url")
             if og_url:
                 og_content = og_url.get("content", "")
-                match = re.search(r'(https://ok\.ru/(profile|group)/[\w\d]+)', og_content)
+                match = re.search(r'(https://ok\\.ru/(profile|group)/[\w\d]+)', og_content)
                 if match:
                     profile_url = match.group(1)
 
-        # Method 3: JSON/script
         if not profile_url:
-            match = re.search(r'"authorLink":"(\\/profile\\/[^"]+)"', html)
+            match = re.search(r'"authorLink":"(\\/profile\\/[^\"]+)"', html)
             if match:
                 profile_url = "https://ok.ru" + match.group(1).replace("\\/", "/")
 
-        # Method 4: Final fallback
         if not profile_url:
             match = re.search(r'/(group|profile)/([\w\d]+)', html)
             if match:
@@ -148,25 +137,47 @@ def scrape_okru_video(url: str) -> VideoDetails:
 
     except Exception as e:
         print(f"[ERROR] {url}: {e}")
-        return VideoDetails(
-            video_url=url,
-            title="N/A",
-            duration="N/A",
-            upload_date="N/A",
-            profile_url="N/A",
-            views="N/A",
-            channel_name="N/A",
-            subscriber_count="N/A"
-        )
+        return VideoDetails(video_url=url, title="N/A", duration="N/A", upload_date="N/A", profile_url="N/A", views="N/A", channel_name="N/A", subscriber_count="N/A")
+
+def extract_iframes(url: str) -> VideoDetails:
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0'
+        }
+        res = requests.get(url, headers=headers, timeout=10)
+        res.raise_for_status()
+        html = res.text
+
+        media_sources = []
+        patterns = [
+            r'<iframe[^>]*src=["\']([^"\']+)["\']',
+            r'<embed[^>]*src=["\']([^"\']+)["\']',
+            r'https?://[^"\']+\.m3u8',
+            r'<video[^>]*src=["\']([^"\']+)["\']'
+        ]
+
+        for pattern in patterns:
+            for match in re.findall(pattern, html, re.IGNORECASE):
+                if match.startswith("//"):
+                    match = "https:" + match
+                media_sources.append(match)
+
+        return VideoDetails(video_url=url, media_sources=media_sources or ["No media URLs found"])
+
+    except Exception as e:
+        return VideoDetails(video_url=url, media_sources=[f"Error: {str(e)}"])
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/api/scrape")
-async def api_scrape_video(url: str):
+async def api_scrape_video(url: str, tool: str = "okru"):
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
+
+    if tool == "iframe":
+        return extract_iframes(url)
 
     parsed_url = urlparse(url)
     if 'ok.ru' not in parsed_url.netloc:
@@ -174,7 +185,6 @@ async def api_scrape_video(url: str):
 
     return scrape_okru_video(url)
 
-# ✅ For Render deployment
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=10000)
