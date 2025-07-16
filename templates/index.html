@@ -2,12 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>🎬 OK.ru Video Scraper</title>
+  <title>🎬 Video Scraper (OK.ru + Dailymotion)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background: #f8f8f8; }
     h2 { color: #333; }
     textarea { width: 100%; height: 140px; font-size: 14px; padding: 8px; }
-    button { padding: 10px 20px; font-size: 16px; background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button, select {
+      padding: 10px 16px;
+      font-size: 15px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+    }
+    select {
+      background: #e0e0ff;
+      color: #333;
+      margin-bottom: 10px;
+      font-weight: bold;
+      border: 2px solid #888;
+    }
+    button { background: #007BFF; color: white; }
     button:hover { background: #0056b3; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 8px; border: 1px solid #ccc; font-size: 14px; }
@@ -20,11 +34,18 @@
   </style>
 </head>
 <body>
-  <h2>🎬 OK.ru Bulk Video Scraper</h2>
+  <h2>🎬 Video Scraper (OK.ru + Dailymotion)</h2>
 
   <form id="scrapeForm">
-    <label>📥 Paste multiple OK.ru URLs (one per line):</label><br>
-    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary&#10;Paste OK.ru URLs here..."></textarea>
+    <label>📺 Platform:</label>
+    <select id="platformSelect">
+      <option value="auto">🔍 Auto Detect</option>
+      <option value="okru">🟠 OK.ru</option>
+      <option value="dailymotion">🔵 Dailymotion</option>
+    </select>
+    <br>
+    <label>📥 Paste video URLs (one per line):</label><br>
+    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary&#10;Paste OK.ru or Dailymotion URLs here..."></textarea>
     <br><br>
     <button type="submit">🚀 Start Scraping</button>
   </form>
@@ -33,16 +54,8 @@
 
   <table id="resultsTable" style="display:none;">
     <thead>
-      <tr>
-        <th>#</th>
-        <th>URL</th>
-        <th>Title</th>
-        <th>Duration</th>
-        <th>Upload Date</th>
-        <th>Views</th>
-        <th>Channel Name</th>
-        <th>Subscribers</th>
-        <th>Profile URL</th>
+      <tr id="headerRow">
+        <!-- Dynamic headers will be inserted here -->
       </tr>
     </thead>
     <tbody></tbody>
@@ -54,26 +67,58 @@
     const table = document.getElementById('resultsTable');
     const tbody = table.querySelector('tbody');
     const copyBtn = document.getElementById('copyBtn');
+    const headerRow = document.getElementById('headerRow');
+    const platformSelect = document.getElementById('platformSelect');
+
+    function getHeaders(platform) {
+      if (platform === "dailymotion") {
+        return ["#", "URL", "Title", "Duration", "Upload Date", "Views", "Likes", "Description", "Tags", "Channel Name", "Subscribers", "Profile URL"];
+      } else {
+        return ["#", "URL", "Title", "Duration", "Upload Date", "Views", "Channel Name", "Subscribers", "Profile URL"];
+      }
+    }
+
+    function updateTableHeaders(platform) {
+      const headers = getHeaders(platform);
+      headerRow.innerHTML = headers.map(h => `<th>${h}</th>`).join('');
+    }
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       const urls = textarea.value.trim().split('\n').filter(Boolean);
-      tbody.innerHTML = '';
+      const selectedPlatform = platformSelect.value;
       if (urls.length === 0) return;
 
+      tbody.innerHTML = '';
       table.style.display = 'table';
       copyBtn.style.display = 'inline-block';
 
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         const row = tbody.insertRow();
-        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="7" class="loading">⏳ Scraping...</td>`;
+        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="11" class="loading">⏳ Scraping...</td>`;
 
         try {
           const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
           const data = await res.json();
 
-          row.innerHTML = `
+          const isDM = url.includes("dailymotion.com");
+          updateTableHeaders(isDM ? "dailymotion" : "okru");
+
+          row.innerHTML = isDM ? `
+            <td>${i + 1}</td>
+            <td><a href="${url}" target="_blank">${url}</a></td>
+            <td>${data.title || '-'}</td>
+            <td>${data.duration || '-'}</td>
+            <td>${data.upload_date || '-'}</td>
+            <td>${data.views || '-'}</td>
+            <td>${data.likes || '-'}</td>
+            <td>${data.description || '-'}</td>
+            <td>${data.tags || '-'}</td>
+            <td>${data.channel_name || '-'}</td>
+            <td>${data.subscriber_count || '-'}</td>
+            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
+          ` : `
             <td>${i + 1}</td>
             <td><a href="${url}" target="_blank">${url}</a></td>
             <td>${data.title || '-'}</td>
@@ -85,11 +130,7 @@
             <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
           `;
         } catch (err) {
-          row.innerHTML = `
-            <td>${i + 1}</td>
-            <td>${url}</td>
-            <td colspan="7" class="error">❌ Error scraping</td>
-          `;
+          row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="11" class="error">❌ Error scraping</td>`;
         }
       }
     });
@@ -107,9 +148,7 @@
 
       navigator.clipboard.writeText(text).then(() => {
         copyBtn.innerText = '✅ Copied!';
-        setTimeout(() => {
-          copyBtn.innerText = '📋 Copy Table';
-        }, 1500);
+        setTimeout(() => { copyBtn.innerText = '📋 Copy Table'; }, 1500);
       }).catch(() => {
         alert('Clipboard copy failed. Try again.');
       });
