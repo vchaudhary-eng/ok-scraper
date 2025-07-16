@@ -8,10 +8,11 @@
     h2 { color: #333; }
     textarea, select { width: 100%; font-size: 14px; padding: 8px; margin-top: 10px; }
     textarea { height: 140px; }
+    select { max-width: 300px; } /* Dropdown ki width control */
     button { padding: 10px 20px; font-size: 16px; background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
     button:hover { background: #0056b3; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 8px; border: 1px solid #ccc; font-size: 14px; }
+    th, td { padding: 8px; border: 1px solid #ccc; font-size: 14px; vertical-align: top; }
     th { background: #eee; }
     .loading { color: orange; }
     .success { color: green; }
@@ -21,7 +22,7 @@
   </style>
 </head>
 <body>
-  <h2>🧰 Scraper Tool by Vansh Chaudhary</h2>
+  <h2>🧰 Scraper Tool</h2>
 
   <form id="scrapeForm">
     <label>🛠️ Select Tool:</label>
@@ -31,7 +32,7 @@
     </select>
 
     <label>📥 Paste multiple URLs (one per line):</label>
-    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary\nPaste URLs here..."></textarea>
+    <textarea id="urlInput" placeholder="Created by Vansh Chaudhary&#10;Paste URLs here..."></textarea>
 
     <button type="submit">🚀 Start Scraping</button>
   </form>
@@ -66,7 +67,7 @@
       copyBtn.style.display = 'inline-block';
 
       if (tool === 'iframe') {
-        thead.innerHTML = `<th>#</th><th>URL</th><th>Media URLs</th>`;
+        thead.innerHTML = `<th>#</th><th>Infringing URL</th><th>Media URLs</th>`;
       } else {
         thead.innerHTML = `
           <th>#</th>
@@ -84,7 +85,7 @@
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         const row = tbody.insertRow();
-        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="7" class="loading">⏳ Scraping...</td>`;
+        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="${tool === 'iframe' ? 1 : 7}" class="loading">⏳ Scraping...</td>`;
 
         try {
           const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}&tool=${tool}`);
@@ -114,7 +115,7 @@
           row.innerHTML = `
             <td>${i + 1}</td>
             <td>${url}</td>
-            <td colspan="7" class="error">❌ Error scraping</td>
+            <td colspan="${tool === 'iframe' ? 1 : 7}" class="error">❌ Error scraping</td>
           `;
         }
       }
