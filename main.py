@@ -1,164 +1,105 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime, timedelta
-from urllib.parse import urlparse
-import httpx, re
 from bs4 import BeautifulSoup
+import httpx
+import asyncio
 
-app = FastAPI(title="Video Scraper")
+app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-class VideoDetails(BaseModel):
-    video_url: Optional[str] = None
-    title: Optional[str] = None
-    duration: Optional[str] = None
-    upload_date: Optional[str] = None
-    profile_url: Optional[str] = None
-    views: Optional[str] = None
-    channel_name: Optional[str] = None
-    subscriber_count: Optional[str] = None
-
-def convert_to_ddmmyyyy(date_str: str) -> str:
-    month_map = {
-        'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04', 'май': '05', 'мая': '05',
-        'июн': '06', 'июл': '07', 'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
-        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
-        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
-    }
-
-    date_str = date_str.strip().replace('.', '').replace(',', '').lower()
-    parts = date_str.split()
-
-    try:
-        if "вчера" in date_str:
-            return (datetime.now() - timedelta(days=1)).strftime("%d-%m-%Y")
-        elif len(parts) == 3:
-            day = parts[0].zfill(2)
-            month = month_map.get(parts[1][:3], '??')
-            year = parts[2]
-        elif len(parts) == 2:
-            day = parts[0].zfill(2)
-            month = month_map.get(parts[1][:3], '??')
-            year = str(datetime.now().year)
-        elif re.match(r"\d{1,2}-\w{3,}", date_str):
-            sub_parts = date_str.split('-')
-            day = sub_parts[0].zfill(2)
-            month = month_map.get(sub_parts[1][:3], '??')
-            year = sub_parts[2] if len(sub_parts) > 2 else str(datetime.now().year)
-        else:
-            return date_str
-        return f"{day}-{month}-{year}"
-    except:
-        return date_str
-
-async def scrape_okru_video(url: str) -> VideoDetails:
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            res = await client.get(url, headers=headers)
-            html = res.text
-
-        soup = BeautifulSoup(html, 'html.parser')
-        data = VideoDetails(video_url=url)
-
-        data.title = soup.find("meta", property="og:title")['content'].strip() if soup.find("meta", property="og:title") else "N/A"
-
-        duration_match = re.search(r'class="vid-card_duration">([\d:]+)</div>', html)
-        if duration_match:
-            duration = duration_match.group(1)
-            parts = duration.split(":")
-            data.duration = duration if len(parts) == 3 else f"00:{duration}" if len(parts) == 2 else f"00:00:{duration.zfill(2)}"
-        else:
-            data.duration = "N/A"
-
-        upload_match = re.search(r'<span class="vp-layer-info_i vp-layer-info_date">([^<]+)</span>', html)
-        data.upload_date = convert_to_ddmmyyyy(upload_match.group(1)) if upload_match else "N/A"
-
-        views_match = re.search(r'<div class="vp-layer-info_i"><span>(.*?)</span>', html)
-        data.views = views_match.group(1).strip() if views_match else "N/A"
-
-        channel_match = re.search(r'name="([^"]+)" id="[\d]+"', html)
-        data.channel_name = channel_match.group(1) if channel_match else "N/A"
-
-        subs_match = re.search(r'subscriberscount="(\d+)"', html)
-        data.subscriber_count = subs_match.group(1) if subs_match else "N/A"
-
-        # Profile URL
-        profile_url = None
-        hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
-        if hovercard:
-            rel = hovercard["data-entity-hovercard-url"]
-            profile_url = f"https://ok.ru{rel}" if rel.startswith("/") else rel
-        if not profile_url:
-            match = re.search(r'"authorLink":"(\\/profile\\/[^"]+)"', html)
-            if match:
-                profile_url = "https://ok.ru" + match.group(1).replace("\\/", "/")
-        if not profile_url:
-            match = re.search(r'/(group|profile)/([\w\d]+)', html)
-            if match:
-                profile_url = f"https://ok.ru/{match.group(1)}/{match.group(2)}"
-        data.profile_url = profile_url or "N/A"
-
-        return data
-
-    except Exception as e:
-        print(f"Error scraping OK.ru: {e}")
-        return VideoDetails(video_url=url, title="N/A", duration="N/A", upload_date="N/A",
-                            profile_url="N/A", views="N/A", channel_name="N/A", subscriber_count="N/A")
-
-async def scrape_dailymotion_video(url: str) -> VideoDetails:
-    try:
-        video_id = url.strip().split("/")[-1].split("?")[0]
-        base = f"https://api.dailymotion.com/video/{video_id}?fields=id,title,duration,created_time,views_total,likes_total,owner"
-
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(base)
-            video_json = resp.json()
-
-            owner_id = video_json.get("owner", "")
-            owner_resp = await client.get(f"https://api.dailymotion.com/user/{owner_id}?fields=username,followers_total")
-            owner_json = owner_resp.json()
-
-        return VideoDetails(
-            video_url=url,
-            title=video_json.get("title", "N/A"),
-            duration=str(video_json.get("duration", "N/A")),
-            upload_date=datetime.utcfromtimestamp(video_json.get("created_time")).strftime("%d-%m-%Y") if video_json.get("created_time") else "N/A",
-            views=str(video_json.get("views_total", "N/A")),
-            profile_url=f"https://www.dailymotion.com/{owner_id}",
-            channel_name=owner_json.get("username", "N/A"),
-            subscriber_count=str(owner_json.get("followers_total", "N/A"))
-        )
-
-    except Exception as e:
-        print(f"Error scraping Dailymotion: {e}")
-        return VideoDetails(video_url=url, title="N/A", duration="N/A", upload_date="N/A",
-                            profile_url="N/A", views="N/A", channel_name="N/A", subscriber_count="N/A")
 
 @app.get("/", response_class=HTMLResponse)
-async def homepage(request: Request):
+async def serve_home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/api/scrape")
-async def scrape_endpoint(url: str, platform: str = "okru"):
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    parsed = urlparse(url)
 
-    if platform == "okru" and "ok.ru" in parsed.netloc:
-        return await scrape_okru_video(url)
-    elif platform == "dailymotion" and "dailymotion.com" in parsed.netloc:
-        return await scrape_dailymotion_video(url)
+@app.post("/api/scrape")
+async def scrape_api(
+    request: Request,
+    url: str = Form(...),
+    platform: str = Form(default="okru")
+):
+    if platform == "okru":
+        return await scrape_okru_url(url)
+    elif platform == "dailymotion":
+        return await scrape_dailymotion_url(url)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported platform or invalid URL.")
+        return JSONResponse(content={"error": "Unsupported platform"}, status_code=400)
 
-# For local/Render run
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=10000)
+
+@app.post("/api/scrape-multiple")
+async def scrape_multiple(request: Request):
+    form = await request.form()
+    urls = form.get("urls", "").strip().splitlines()
+    platform = form.get("platform", "okru")
+
+    tasks = []
+
+    for url in urls:
+        url = url.strip()
+        if url:
+            if platform == "okru":
+                tasks.append(scrape_okru_url(url))
+            elif platform == "dailymotion":
+                tasks.append(scrape_dailymotion_url(url))
+
+    results = await asyncio.gather(*tasks)
+    return JSONResponse(content={"results": results})
+
+
+# -----------------------
+# OK.ru Scraper Function
+# -----------------------
+async def scrape_okru_url(url: str):
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            title = soup.select_one("meta[property='og:title']")
+            title = title["content"].strip() if title else "N/A"
+
+            duration = soup.select_one("div.media-status-item_duration")
+            duration = duration.text.strip() if duration else "N/A"
+
+            profile_tag = soup.select_one("div.ucard-mini_cnt > a")
+            profile_url = "https://ok.ru" + profile_tag["href"] if profile_tag else "N/A"
+
+            return {
+                "url": url,
+                "title": title,
+                "duration": duration,
+                "profile_url": profile_url,
+                "platform": "okru"
+            }
+
+    except Exception as e:
+        return {"url": url, "error": str(e), "platform": "okru"}
+
+
+# ----------------------------
+# Dailymotion Scraper Function
+# ----------------------------
+async def scrape_dailymotion_url(url: str):
+    try:
+        video_id = url.strip().split("/")[-1].split("_")[0]
+        api_url = f"https://www.dailymotion.com/player/metadata/video/{video_id}"
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(api_url)
+            data = response.json()
+
+            return {
+                "url": url,
+                "title": data.get("title", "N/A"),
+                "duration": f"{int(data.get('duration', 0))}s",
+                "profile_url": f"https://www.dailymotion.com/{data['owner']['username']}" if data.get("owner") else "N/A",
+                "platform": "dailymotion"
+            }
+
+    except Exception as e:
+        return {"url": url, "error": str(e), "platform": "dailymotion"}
