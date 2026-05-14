@@ -32,7 +32,7 @@
   </style>
 </head>
 <body>
-  <h2>🎬 Video Scraper (OK.ru + Dailymotion)</h2>
+  <h2>🎬 Video Scraper (OK.ru + Dailymotion + Moj)</h2>
 
   <form id="scrapeForm">
     <label>📥 Paste multiple URLs (one per line):</label><br>
@@ -42,6 +42,7 @@
     <select id="platformSelect">
       <option value="okru">OK.ru</option>
       <option value="dailymotion">Dailymotion</option>
+      <option value="moj">Moj</option>
     </select>
     <button type="submit">🚀 Start Scraping</button>
   </form>
@@ -75,9 +76,17 @@
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
-      const urls = textarea.value.trim().split('\n').filter(Boolean);
+
+      const urls = textarea.value
+        .trim()
+        .split('\n')
+        .map(url => url.trim())
+        .filter(Boolean);
+
       const platform = platformSelect.value;
+
       tbody.innerHTML = '';
+
       if (urls.length === 0) return;
 
       table.style.display = 'table';
@@ -85,11 +94,22 @@
 
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
+
         const row = tbody.insertRow();
-        row.innerHTML = `<td>${i + 1}</td><td>${url}</td><td colspan="7" class="loading">⏳ Scraping...</td>`;
+
+        row.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${url}</td>
+          <td colspan="7" class="loading">⏳ Scraping...</td>
+        `;
 
         try {
           const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}&platform=${platform}`);
+
+          if (!res.ok) {
+            throw new Error("Scrape failed");
+          }
+
           const data = await res.json();
 
           row.innerHTML = `
@@ -101,8 +121,13 @@
             <td>${data.views || '-'}</td>
             <td>${data.channel_name || '-'}</td>
             <td>${data.subscriber_count || '-'}</td>
-            <td>${data.profile_url ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>` : 'N/A'}</td>
+            <td>${
+              data.profile_url && data.profile_url !== "N/A"
+                ? `<a href="${data.profile_url}" target="_blank">${data.profile_url}</a>`
+                : 'N/A'
+            }</td>
           `;
+
         } catch (err) {
           row.innerHTML = `
             <td>${i + 1}</td>
@@ -115,20 +140,30 @@
 
     copyBtn.addEventListener('click', function () {
       let text = '';
-      const headers = [...table.querySelectorAll('thead th')].map(th => th.innerText.trim()).join('\t');
+
+      const headers = [...table.querySelectorAll('thead th')]
+        .map(th => th.innerText.trim())
+        .join('\t');
+
       text += headers + '\n';
 
       const rows = [...tbody.querySelectorAll('tr')];
+
       for (const row of rows) {
-        const cols = [...row.querySelectorAll('td')].map(td => td.innerText.trim()).join('\t');
+        const cols = [...row.querySelectorAll('td')]
+          .map(td => td.innerText.trim())
+          .join('\t');
+
         text += cols + '\n';
       }
 
       navigator.clipboard.writeText(text).then(() => {
         copyBtn.innerText = '✅ Copied!';
+
         setTimeout(() => {
           copyBtn.innerText = '📋 Copy Table';
         }, 1500);
+
       }).catch(() => {
         alert('Clipboard copy failed. Try again.');
       });
