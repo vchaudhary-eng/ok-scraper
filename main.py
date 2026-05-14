@@ -129,7 +129,6 @@ try:
     data.subscriber_count = subs_match.group(1) if subs_match else "N/A"
 
     profile_url = None
-
     hovercard = soup.find(attrs={"data-entity-hovercard-url": True})
 
     if hovercard:
@@ -191,9 +190,7 @@ video_id = url.strip().split("/")[-1].split("?")[0]
         views=str(video_json.get("views_total", "N/A")),
         profile_url=f"https://www.dailymotion.com/{owner_id}",
         channel_name=owner_json.get("username", "N/A"),
-        subscriber_count=str(
-            owner_json.get("followers_total", "N/A")
-        )
+        subscriber_count=str(owner_json.get("followers_total", "N/A"))
     )
 
 except Exception as e:
@@ -245,9 +242,7 @@ try:
                     dt = datetime.strptime(upload_date, "%Y-%m-%d")
                     upload_date = dt.strftime("%d-%m-%Y")
 
-                duration = convert_iso8601_duration(
-                    data.get("duration", "")
-                )
+                duration = convert_iso8601_duration(data.get("duration", ""))
 
                 interaction = data.get("interactionStatistic", [])
 
@@ -257,10 +252,7 @@ try:
                         == "http://schema.org/WatchAction"
                     ):
                         views = str(
-                            stat.get(
-                                "userInteractionCount",
-                                "N/A"
-                            )
+                            stat.get("userInteractionCount", "N/A")
                         )
 
                 break
