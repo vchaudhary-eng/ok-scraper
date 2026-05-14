@@ -14,14 +14,14 @@ app = FastAPI(title="Video Scraper")
 templates = Jinja2Templates(directory="templates")
 
 class VideoDetails(BaseModel):
-video_url: Optional[str] = None
-title: Optional[str] = None
-duration: Optional[str] = None
-upload_date: Optional[str] = None
-profile_url: Optional[str] = None
-views: Optional[str] = None
-channel_name: Optional[str] = None
-subscriber_count: Optional[str] = None
+    video_url: Optional[str] = None
+    title: Optional[str] = None
+    duration: Optional[str] = None
+    upload_date: Optional[str] = None
+    profile_url: Optional[str] = None
+    views: Optional[str] = None
+    channel_name: Optional[str] = None
+    subscriber_count: Optional[str] = None
 
 def convert_to_ddmmyyyy(date_str: str) -> str:
 month_map = {
