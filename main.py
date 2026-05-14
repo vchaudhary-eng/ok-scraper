@@ -28,13 +28,13 @@ class VideoDetails(BaseModel):
 
 def convert_to_ddmmyyyy(date_str: str) -> str:
     month_map = {
-        'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04', 'май': '05', 'мая': '05',
-        'июн': '06', 'июл': '07', 'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
-        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
-        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+        "янв": "01", "фев": "02", "мар": "03", "апр": "04", "май": "05", "мая": "05",
+        "июн": "06", "июл": "07", "авг": "08", "сен": "09", "окт": "10", "ноя": "11", "дек": "12",
+        "jan": "01", "feb": "02", "mar": "03", "apr": "04", "may": "05", "jun": "06",
+        "jul": "07", "aug": "08", "sep": "09", "oct": "10", "nov": "11", "dec": "12"
     }
 
-    date_str = date_str.strip().replace('.', '').replace(',', '').lower()
+    date_str = date_str.strip().replace(".", "").replace(",", "").lower()
     parts = date_str.split()
 
     try:
@@ -42,11 +42,11 @@ def convert_to_ddmmyyyy(date_str: str) -> str:
             return (datetime.now() - timedelta(days=1)).strftime("%d-%m-%Y")
         elif len(parts) == 3:
             day = parts[0].zfill(2)
-            month = month_map.get(parts[1][:3], '??')
+            month = month_map.get(parts[1][:3], "??")
             year = parts[2]
         elif len(parts) == 2:
             day = parts[0].zfill(2)
-            month = month_map.get(parts[1][:3], '??')
+            month = month_map.get(parts[1][:3], "??")
             year = str(datetime.now().year)
         else:
             return date_str
@@ -58,7 +58,7 @@ def convert_to_ddmmyyyy(date_str: str) -> str:
 
 
 def convert_iso8601_duration(iso):
-    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', iso)
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso)
 
     if not match:
         return "N/A"
@@ -70,10 +70,9 @@ def convert_iso8601_duration(iso):
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-# ---------------- OK.RU ----------------
 def scrape_okru_video(url: str) -> VideoDetails:
     headers = {
-        'User-Agent': 'Mozilla/5.0'
+        "User-Agent": "Mozilla/5.0"
     }
 
     try:
@@ -81,12 +80,12 @@ def scrape_okru_video(url: str) -> VideoDetails:
         res.raise_for_status()
 
         html = res.text
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
         data = VideoDetails(video_url=url)
 
         data.title = (
-            soup.find("meta", property="og:title")['content'].strip()
+            soup.find("meta", property="og:title")["content"].strip()
             if soup.find("meta", property="og:title")
             else "N/A"
         )
@@ -156,7 +155,6 @@ def scrape_okru_video(url: str) -> VideoDetails:
         )
 
 
-# ---------------- DAILYMOTION ----------------
 def scrape_dailymotion_video(url: str) -> VideoDetails:
     try:
         video_id = url.strip().split("/")[-1].split("?")[0]
@@ -171,8 +169,7 @@ def scrape_dailymotion_video(url: str) -> VideoDetails:
         owner_id = video_json.get("owner", "")
 
         owner_json = requests.get(
-            f"https://api.dailymotion.com/user/{owner_id}"
-            f"?fields=username,followers_total",
+            f"https://api.dailymotion.com/user/{owner_id}?fields=username,followers_total",
             timeout=10
         ).json()
 
@@ -213,7 +210,6 @@ def scrape_dailymotion_video(url: str) -> VideoDetails:
         )
 
 
-# ---------------- MOJ ----------------
 def scrape_moj_video(url: str) -> VideoDetails:
     headers = {
         "User-Agent": "Mozilla/5.0"
@@ -296,7 +292,6 @@ def scrape_moj_video(url: str) -> VideoDetails:
         )
 
 
-# ---------------- HOME PAGE ----------------
 @app.get("/", response_class=HTMLResponse)
 async def homepage(request: Request):
     return templates.TemplateResponse(
@@ -305,7 +300,6 @@ async def homepage(request: Request):
     )
 
 
-# ---------------- API ENDPOINT ----------------
 @app.get("/api/scrape")
 async def scrape_endpoint(url: str, platform: str = "okru"):
     if not url.startswith(("http://", "https://")):
@@ -333,7 +327,6 @@ async def scrape_endpoint(url: str, platform: str = "okru"):
         )
 
 
-# ---------------- RUN ----------------
 if __name__ == "__main__":
     import uvicorn
 
